@@ -296,34 +296,35 @@ public:
         flush_scoreboard();
         print_scoreboard();
 
-        // Scroll process: unfreeze problems one by one
-        while (true) {
-            // Pre-calculate all stats
-            for (auto& tp : teams) {
-                calculate_team_stats(tp.second, false);
+        // Pre-calculate all stats once at the start
+        for (auto& tp : teams) {
+            calculate_team_stats(tp.second, false);
+        }
+
+        // Get initial ranking order
+        vector<string> sorted_teams = team_order;
+        sort(sorted_teams.begin(), sorted_teams.end(), [this](const string& a, const string& b) {
+            Team& t1 = teams[a];
+            Team& t2 = teams[b];
+
+            if (t1.solved_count != t2.solved_count) {
+                return t1.solved_count > t2.solved_count;
+            }
+            if (t1.penalty_time != t2.penalty_time) {
+                return t1.penalty_time < t2.penalty_time;
             }
 
-            // Get current ranking order
-            vector<string> sorted_teams = team_order;
-            sort(sorted_teams.begin(), sorted_teams.end(), [this](const string& a, const string& b) {
-                Team& t1 = teams[a];
-                Team& t2 = teams[b];
-
-                if (t1.solved_count != t2.solved_count) {
-                    return t1.solved_count > t2.solved_count;
+            for (size_t i = 0; i < min(t1.solve_times.size(), t2.solve_times.size()); i++) {
+                if (t1.solve_times[i] != t2.solve_times[i]) {
+                    return t1.solve_times[i] < t2.solve_times[i];
                 }
-                if (t1.penalty_time != t2.penalty_time) {
-                    return t1.penalty_time < t2.penalty_time;
-                }
+            }
 
-                for (size_t i = 0; i < min(t1.solve_times.size(), t2.solve_times.size()); i++) {
-                    if (t1.solve_times[i] != t2.solve_times[i]) {
-                        return t1.solve_times[i] < t2.solve_times[i];
-                    }
-                }
+            return a < b;
+        });
 
-                return a < b;
-            });
+        // Scroll process: unfreeze problems one by one
+        while (true) {
 
             // Find lowest ranked team with frozen problems
             string lowest_team = "";
@@ -386,8 +387,34 @@ public:
                 old_rankings[name] = teams[name].ranking;
             }
 
-            // Recalculate rankings
-            flush_scoreboard();
+            // Recalculate stats only for the changed team
+            calculate_team_stats(team, false);
+
+            // Re-sort to get new rankings
+            sort(sorted_teams.begin(), sorted_teams.end(), [this](const string& a, const string& b) {
+                Team& t1 = teams[a];
+                Team& t2 = teams[b];
+
+                if (t1.solved_count != t2.solved_count) {
+                    return t1.solved_count > t2.solved_count;
+                }
+                if (t1.penalty_time != t2.penalty_time) {
+                    return t1.penalty_time < t2.penalty_time;
+                }
+
+                for (size_t i = 0; i < min(t1.solve_times.size(), t2.solve_times.size()); i++) {
+                    if (t1.solve_times[i] != t2.solve_times[i]) {
+                        return t1.solve_times[i] < t2.solve_times[i];
+                    }
+                }
+
+                return a < b;
+            });
+
+            // Update rankings
+            for (size_t i = 0; i < sorted_teams.size(); i++) {
+                teams[sorted_teams[i]].ranking = i + 1;
+            }
 
             int new_rank = team.ranking;
 
